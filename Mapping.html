@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ground Locations</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCLIeL8IaEDM7D-JPIWRcwn7HGWZMcY10E&libraries=places"></script>
+    <script>
+        let map;
+        let directionsService;
+        let directionsRenderer;
+        let groundData;
+        let sourceSelect;
+        let destinationSelect;
+        let routeLabel;
+
+        async function initMap() {
+            // Initialize the map
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 10,
+                center: {lat: 38.268220, lng: -85.470180} // Center the map to your origin
+            });
+
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+
+            sourceSelect = document.getElementById('source');
+            destinationSelect = document.getElementById('destination');
+
+            // Create a label for route information
+            routeLabel = new google.maps.InfoWindow();
+
+            try {
+                // Load ground data from JSON file
+                const response = await fetch('ground_data.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                groundData = await response.json();
+                console.log('Ground Data Loaded:', groundData);
+
+                // Populate select options for source and destination
+                groundData.forEach((ground) => {
+                    const option = document.createElement('option');
+                    option.value = ground.address;
+                    option.text = ground.name;
+                    sourceSelect.add(option);
+
+                    const optionClone = option.cloneNode(true);
+                    destinationSelect.add(optionClone);
+
+                    // Add marker for each ground address
+                    addMarker(ground);
+                });
+            } catch (error) {
+                console.error('Error loading ground data:', error);
+            }
+
+            document.getElementById('calculateRoute').addEventListener('click', () => {
+                const origin = sourceSelect.value;
+                const destination = destinationSelect.value;
+                if (origin && destination) {
+                    calculateAndDisplayRoute(origin, destination);
+                } else {
+                    console.error('Please select both source and destination.');
+                    alert('Please select both source and destination.');
+                }
+            });
+        }
+
+        function addMarker(ground) {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ 'address': ground.address }, function(results, status) {
+                if (status === 'OK') {
+                    const marker = new google.maps.Marker({
+                        map: map,
+                        position: results[0].geometry.location,
+                        title: ground.name
+                    });
+
+                    const infowindow = new google.maps.InfoWindow({
+                        content: `<div><strong>${ground.name}</strong><br>${ground.address}</div>`
+                    });
+
+                    marker.addListener('click', function() {
+                        infowindow.open(map, marker);
+                    });
+                } else {
+                    console.error('Geocode was not successful for the following reason: ' + status);
+                }
+            });
+        }
+
+        function calculateAndDisplayRoute(origin, destination) {
+            directionsService.route(
+                {
+                    origin: origin,
+                    destination: destination,
+                    travelMode: google.maps.TravelMode.DRIVING,
+                },
+                (response, status) => {
+                    if (status === 'OK') {
+                        directionsRenderer.setDirections(response);
+                        const route = response.routes[0].legs[0];
+                        const routeInfo = `Distance: ${route.distance.text}, Duration: ${route.duration.text}`;
+
+                        // Set the position and content of the route label
+                        routeLabel.setPosition(route.end_location);
+                        routeLabel.setContent(routeInfo);
+                        routeLabel.open(map);
+                    } else {
+                        console.error('Directions request failed due to ' + status);
+                        alert('Directions request failed due to ' + status);
+                    }
+                }
+            );
+        }
+
+        window.onload = initMap;
+    </script>
+    <style>
+        #map {
+            height: 80vh;
+            width: 100%;
+        }
+        #controls {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="source">Source Ground:</label>
+        <select id="source">
+            <option value="">Select a source</option>
+        </select>
+        <label for="destination">Destination Ground:</label>
+        <select id="destination">
+            <option value="">Select a destination</option>
+        </select>
+        <button id="calculateRoute">Calculate Route</button>
+    </div>
+    <div id="map"></div>
+</body>
+</html>
